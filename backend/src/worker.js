@@ -61,7 +61,11 @@ const aiWorker = new Worker(
       username: process.env.REDIS_USERNAME,
       password: process.env.REDIS_PASSWORD
     },
-    concurrency: 5
+    concurrency: 5,
+    limiter: {
+      max: 10,
+      duration: 1000
+    }
   }
 );
 
