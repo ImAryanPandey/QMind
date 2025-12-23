@@ -1,0 +1,9 @@
+# Global ignores
+.DS_Store
+.vscode/
+.env
+
+# Ignore node_modules everywhere (Root, Backend, and Frontend)
+**/node_modules
+**/dist
+**/build
