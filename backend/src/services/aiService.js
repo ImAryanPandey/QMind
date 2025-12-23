@@ -4,135 +4,62 @@ import chatService from './chatService.js';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-console.log('🤖 AI Service initialized with Groq');
-
 class AIService {
   async generateResponse(conversationId, message, userId) {
-    console.log(`🔄 Generating AI response for conversation ${conversationId}`);
-    
     try {
-      // Get conversation history
-      const conversationHistory = await this.getConversationHistory(conversationId);
+      const relevantDocs = await this.retrieveDocuments(message);
       
-      // Get context
-      const context = await redisService.getConversationContext(conversationId) || {
-        systemPrompt: "You are a helpful AI assistant. Be friendly, professional, and concise.",
-        lastTopic: null
-      };
+      // 2. Build Context
+      const systemPrompt = `You are a helpful assistant for QMind.
+      Use the following context to answer the user's question if relevant:
+      ${relevantDocs}
       
-      // Generate response
-      const response = await this.callGroqAPI(message, conversationHistory, context);
-      
-      // Save to database
+      If the context doesn't help, answer normally.`;
+
+      const history = await this.getConversationHistory(conversationId);
+
+      const response = await this.callGroqAPI(message, history, systemPrompt);
+
       await chatService.addMessage(conversationId, 'AI', response, 'ai');
-      
-      // Update context
-      await this.updateContext(conversationId, message, response);
-      
-      console.log(`✅ AI response generated: ${response.substring(0, 100)}...`);
+
       return response;
     } catch (error) {
-      console.error('❌ Error generating AI response:', error);
-      throw new Error('Failed to generate AI response');
+      console.error('AI Gen Error:', error);
+      return "I'm having trouble connecting to my brain right now.";
     }
+  }
+
+
+  async retrieveDocuments(query) {
+
+    const knowledgeBase = await redisService.get('business_knowledge') || [];
+    
+
+    const relevant = knowledgeBase.filter(doc => 
+      doc.content.toLowerCase().includes(query.toLowerCase().split(' ')[0])
+    );
+    
+    return relevant.map(d => d.content).join('\n');
   }
 
   async getConversationHistory(conversationId) {
-    try {
-      // Check cache first
-      const cachedHistory = await redisService.get(`conversation:${conversationId}:history`);
-      if (cachedHistory) {
-        console.log(`📚 Using cached history for conversation ${conversationId}`);
-        return cachedHistory;
-      }
-      
-      // Get from database
-      const messages = await chatService.getMessagesByConversationId(conversationId);
-      const history = messages.map(msg => ({
-        role: msg.messageType === 'user' ? 'user' : 'assistant',
-        content: msg.content
-      }));
-      
-      // Cache for 5 minutes
-      await redisService.set(`conversation:${conversationId}:history`, history, 300);
-      
-      console.log(`📝 Retrieved and cached ${history.length} messages`);
-      return history;
-    } catch (error) {
-      console.error('❌ Error getting conversation history:', error);
-      return [];
-    }
+    const messages = await chatService.getMessagesByConversationId(conversationId);
+    return messages.map(msg => ({
+      role: msg.messageType === 'user' ? 'user' : 'assistant',
+      content: msg.content
+    })).slice(-10); // Keep last 10
   }
 
-  async callGroqAPI(message, history, context) {
-    console.log('🌐 Calling Groq API...');
-    
-    try {
-      // Check cache
-      const cachedResponse = await redisService.getCachedAIResponse(message);
-      if (cachedResponse) {
-        console.log('💾 Using cached AI response');
-        return cachedResponse;
-      }
-      
-      // Prepare messages
-      const messages = [
-        { role: "system", content: context.systemPrompt },
-        ...history.slice(-10),
+  async callGroqAPI(message, history, systemPrompt) {
+    const completion = await groq.chat.completions.create({
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...history,
         { role: "user", content: message }
-      ];
-      
-      console.log(`📤 Sending request to Groq with ${messages.length} messages`);
-      
-      // Call Groq
-      const completion = await groq.chat.completions.create({
-        messages,
-        model: "llama-3.1-8b-instant",
-        temperature: 0.7,
-        max_tokens: 1024,
-        top_p: 1,
-        stream: false
-      });
-      
-      const response = completion.choices[0]?.message?.content || "I'm sorry, I couldn't generate a response.";
-      
-      console.log(`🎯 Groq API response: ${response.substring(0, 100)}...`);
-      
-      // Cache response
-      await redisService.cacheAIResponse(message, response);
-      
-      return response;
-    } catch (error) {
-      console.error('❌ Error calling Groq API:', error);
-      throw new Error('Failed to get AI response');
-    }
-  }
-
-  async updateContext(conversationId, userMessage, aiResponse) {
-    try {
-      const topic = await this.extractTopic(userMessage);
-      
-      const context = {
-        systemPrompt: "You are a helpful AI assistant. Be friendly, professional, and concise.",
-        lastTopic: topic,
-        lastUpdated: new Date().toISOString()
-      };
-      
-      await redisService.setConversationContext(conversationId, context);
-      
-      console.log(`🔄 Updated context for conversation ${conversationId}`);
-    } catch (error) {
-      console.error('❌ Error updating context:', error);
-    }
-  }
-
-  async extractTopic(message) {
-    const words = message.toLowerCase().split(/\s+/);
-    const stopWords = ['the', 'a', 'an', 'and', 'or', 'but', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'shall', 'should', 'may', 'might', 'must', 'can', 'could'];
-    
-    const keywords = words.filter(word => word.length > 3 && !stopWords.includes(word));
-    
-    return keywords.length > 0 ? keywords[0] : 'general';
+      ],
+      model: "llama-3.1-8b-instant",
+    });
+    return completion.choices[0]?.message?.content || "No response";
   }
 }
 

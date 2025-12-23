@@ -3,13 +3,14 @@ import chatController from '../controllers/chatController.js';
 
 const router = express.Router();
 
-// Conversation routes
-router.post('/conversations', chatController.createConversation);
-router.get('/conversations/:conversationId', chatController.getConversation);
-router.get('/users/:userId/conversations', chatController.getUserConversations);
+// Chat Routes
+router.post('/conversation', chatController.createConversation);
+router.get('/conversation/:conversationId', chatController.getConversation);
+router.get('/conversation/:conversationId/messages', chatController.getMessages);
+router.post('/message', chatController.addMessage);
+router.get('/user/:userId/conversations', chatController.getUserConversations);
 
-// Message routes
-router.get('/conversations/:conversationId/messages', chatController.getMessages);
-router.post('/messages', chatController.addMessage);
+// Ingestion Pipeline
+router.post('/ingest', chatController.ingestDocument); 
 
 export default router;
