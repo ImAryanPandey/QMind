@@ -1,104 +1,47 @@
-import { useState } from 'react';
-import { PaperAirplaneIcon, DocumentTextIcon } from '@heroicons/react/24/solid';
-import { uploadKnowledge } from '../services/api';
+import React, { useState, useRef, useEffect } from 'react';
 
-const MessageInput = ({ onSendMessage }) => {
-  const [message, setMessage] = useState('');
-  const [showIngest, setShowIngest] = useState(false);
-  const [ingestTitle, setIngestTitle] = useState('');
-  const [ingestContent, setIngestContent] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
+export default function MessageInput({ onSendMessage, disabled }) {
+  const [value, setValue] = useState('');
+  const ref = useRef();
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (message.trim()) {
-      onSendMessage(message);
-      setMessage('');
-    }
-  };
+  // Auto-focus the input on load
+  useEffect(() => ref.current?.focus(), []);
 
-  const handleIngest = async (e) => {
-    e.preventDefault();
-    if (!ingestTitle || !ingestContent) return;
-
-    setIsUploading(true);
-    try {
-      await uploadKnowledge(ingestTitle, ingestContent);
-      alert('Knowledge Ingested Successfully! The AI can now use this context.');
-      setIngestTitle('');
-      setIngestContent('');
-      setShowIngest(false);
-    } catch (error) {
-      console.error('Upload failed', error);
-      alert('Failed to upload knowledge');
-    } finally {
-      setIsUploading(false);
-    }
+  const submit = (e) => {
+    e?.preventDefault();
+    if (!value.trim() || disabled) return;
+    onSendMessage(value.trim());
+    setValue('');
   };
 
   return (
-    <div className="border-t border-gray-700 p-4 bg-gray-800">
-      {showIngest && (
-        <div className="mb-4 p-4 bg-gray-700 rounded-lg border border-gray-600">
-          <h3 className="text-white text-sm font-bold mb-2">Upload Knowledge (RAG)</h3>
-          <input
-            type="text"
-            placeholder="Document Title"
-            className="w-full mb-2 p-2 rounded bg-gray-600 text-white text-sm focus:outline-none"
-            value={ingestTitle}
-            onChange={(e) => setIngestTitle(e.target.value)}
-          />
-          <textarea
-            placeholder="Paste document content here..."
-            className="w-full mb-2 p-2 rounded bg-gray-600 text-white text-sm focus:outline-none h-24"
-            value={ingestContent}
-            onChange={(e) => setIngestContent(e.target.value)}
-          />
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={() => setShowIngest(false)}
-              className="px-3 py-1 text-xs text-gray-300 hover:text-white"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleIngest}
-              disabled={isUploading}
-              className="px-3 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded"
-            >
-              {isUploading ? 'Uploading...' : 'Ingest Knowledge'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit} className="flex items-center space-x-2">
-        <button
-          type="button"
-          onClick={() => setShowIngest(!showIngest)}
-          className="p-2 text-gray-400 hover:text-white transition-colors"
-          title="Upload Knowledge Base"
-        >
-          <DocumentTextIcon className="h-6 w-6" />
-        </button>
-
+    <div className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-4 transition-colors">
+      <form 
+        onSubmit={submit} 
+        className="max-w-4xl mx-auto relative flex gap-3 items-center"
+      >
         <input
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="Type a message..."
-          className="flex-1 bg-gray-700 text-white rounded-full py-2 px-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          ref={ref}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder={disabled ? "AI is processing..." : "Type your message..."}
+          disabled={disabled}
+          className="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all disabled:opacity-50"
+          onKeyDown={(e) => { 
+            if (e.key === 'Enter' && !e.shiftKey) submit(e); 
+          }}
         />
-        <button
-          type="submit"
-          disabled={!message.trim()}
-          className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        <button 
+          type="submit" 
+          disabled={disabled || !value.trim()}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white p-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          <PaperAirplaneIcon className="h-5 w-5" />
+          {/* Simple Send Icon SVG */}
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+            <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+          </svg>
         </button>
       </form>
     </div>
   );
-};
-
-export default MessageInput;
+}
