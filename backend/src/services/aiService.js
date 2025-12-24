@@ -9,12 +9,12 @@ class AIService {
     try {
       const relevantDocs = await this.retrieveDocuments(message);
       
-      // 2. Build Context
       const systemPrompt = `You are a helpful assistant for QMind.
-      Use the following context to answer the user's question if relevant:
+      Use the following context to answer the user's question if relevant.
+      Context:
       ${relevantDocs}
       
-      If the context doesn't help, answer normally.`;
+      If the context doesn't help, answer normally based on your general knowledge.`;
 
       const history = await this.getConversationHistory(conversationId);
 
@@ -24,22 +24,35 @@ class AIService {
 
       return response;
     } catch (error) {
-      console.error('AI Gen Error:', error);
-      return "I'm having trouble connecting to my brain right now.";
+      console.error(error);
+      return "I am currently unable to process your request.";
     }
   }
 
-
   async retrieveDocuments(query) {
-
     const knowledgeBase = await redisService.get('business_knowledge') || [];
-    
+    if (!knowledgeBase.length) return "";
 
-    const relevant = knowledgeBase.filter(doc => 
-      doc.content.toLowerCase().includes(query.toLowerCase().split(' ')[0])
-    );
+    const keywords = query.toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .split(' ')
+      .filter(w => w.length > 3);
+
+    const scoredDocs = knowledgeBase.map(doc => {
+      let score = 0;
+      const contentLower = doc.content.toLowerCase();
+      keywords.forEach(word => {
+        if (contentLower.includes(word)) score++;
+      });
+      return { ...doc, score };
+    });
+
+    const relevant = scoredDocs
+      .filter(d => d.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
     
-    return relevant.map(d => d.content).join('\n');
+    return relevant.map(d => d.content).join('\n\n');
   }
 
   async getConversationHistory(conversationId) {
@@ -47,7 +60,7 @@ class AIService {
     return messages.map(msg => ({
       role: msg.messageType === 'user' ? 'user' : 'assistant',
       content: msg.content
-    })).slice(-10); // Keep last 10
+    })).slice(-6); 
   }
 
   async callGroqAPI(message, history, systemPrompt) {
@@ -58,8 +71,9 @@ class AIService {
         { role: "user", content: message }
       ],
       model: "llama-3.1-8b-instant",
+      temperature: 0.7,
     });
-    return completion.choices[0]?.message?.content || "No response";
+    return completion.choices[0]?.message?.content || "No response generated.";
   }
 }
 

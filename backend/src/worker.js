@@ -1,17 +1,13 @@
 import { Worker, Queue } from 'bullmq';
+import path from 'path';
+import { config } from 'dotenv';
 import aiService from './services/aiService.js';
 import connectDB from '../config/db.js';
-import { config } from 'dotenv';
-import * as path from 'path';
-
 
 const envPath = path.resolve(process.cwd(), '.env');
 config({ path: envPath });
 
-console.log('🏭 Initializing AI Worker System...');
-
 await connectDB();
-
 
 const aiEventsQueue = new Queue('ai-events', {
   connection: {
@@ -22,16 +18,10 @@ const aiEventsQueue = new Queue('ai-events', {
   }
 });
 
-
 const aiWorker = new Worker('ai-queue', async (job) => {
-    console.log(`⚙️ Processing Job ${job.id} | Chat: ${job.data.conversationId}`);
-
     const { conversationId, message, userId } = job.data;
-
     try {
-      
       const aiResponse = await aiService.generateResponse(conversationId, message, userId);
-
       
       await aiEventsQueue.add('ai-response', {
         conversationId,
@@ -41,11 +31,9 @@ const aiWorker = new Worker('ai-queue', async (job) => {
         timestamp: new Date().toISOString()
       });
 
-      console.log(`✅ Job ${job.id} Completed.`);
       return { success: true };
-
     } catch (error) {
-      console.error(`❌ Job ${job.id} Failed:`, error.message);
+      console.error(error);
       throw error; 
     }
   }, 
@@ -56,12 +44,10 @@ const aiWorker = new Worker('ai-queue', async (job) => {
       username: process.env.REDIS_USERNAME,
       password: process.env.REDIS_PASSWORD
     },
-    concurrency: 5,        
+    concurrency: 5,
     limiter: {
-      max: 10,             
-      duration: 1000       
+      max: 10,
+      duration: 1000
     }
   }
 );
-
-console.log('✅ Worker is Online & Listening...');

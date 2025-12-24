@@ -3,12 +3,15 @@ import { io } from 'socket.io-client';
 import Header from './Header';
 import MessageList from './MessageList';
 import MessageInput from './MessageInput';
+import IngestModal from './IngestModal';
 
 export default function ChatContainer() {
   const [messages, setMessages] = useState([]);
   const [isTyping, setIsTyping] = useState(false);
   const [conversationId, setConversationId] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
+  const [showIngest, setShowIngest] = useState(false);
+  
   const userIdRef = useRef(`user-${Math.floor(Math.random() * 1000000)}`);
   const socketRef = useRef(null);
 
@@ -27,16 +30,17 @@ export default function ChatContainer() {
     });
 
     socket.on('messageReceived', (msg) => {
-      setMessages((prev) => [...prev, msg]);
+      setMessages((prev) => {
+        const exists = prev.some(p => p.timestamp === msg.timestamp && p.content === msg.content);
+        return exists ? prev : [...prev, msg];
+      });
     });
 
     socket.on('aiProcessing', (data) => {
       setIsTyping(data.status === 'processing');
-      // optionally show "AI is typing" message
     });
 
     socket.on('disconnect', () => setConnectionStatus('disconnected'));
-
     socket.on('connect_error', () => setConnectionStatus('error'));
 
     return () => socket.disconnect();
@@ -51,30 +55,33 @@ export default function ChatContainer() {
       messageType: 'user',
       timestamp: new Date().toISOString(),
     };
-    // optimistic display
+    
     setMessages((prev) => [...prev, message]);
     socketRef.current.emit('newMessage', message);
   };
 
   return (
-    <div className="flex flex-col h-screen">
-      <Header connectionStatus={connectionStatus} />
-      <div className="flex-1 overflow-auto">
+    <div className="flex flex-col h-screen bg-gray-50 dark:bg-gray-900 transition-colors">
+      <Header 
+        connectionStatus={connectionStatus} 
+        onOpenIngest={() => setShowIngest(true)}
+      />
+      
+      <div className="flex-1 overflow-auto relative">
         <MessageList messages={messages} />
         {isTyping && (
-          <div className="px-6 pb-4">
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <div className="flex">
-                <div className="typing-dot" />
-                <div className="typing-dot" />
-                <div className="typing-dot" />
-              </div>
-              AI is typing...
+          <div className="px-6 pb-4 animate-fade-in">
+            <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+               <span className="typing-dot" /> <span className="typing-dot" /> <span className="typing-dot" />
+               <span className="ml-2">AI is thinking...</span>
             </div>
           </div>
         )}
       </div>
+
       <MessageInput onSendMessage={sendMessage} disabled={isTyping} />
+      
+      <IngestModal isOpen={showIngest} onClose={() => setShowIngest(false)} />
     </div>
   );
 }
