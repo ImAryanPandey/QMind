@@ -9,6 +9,13 @@ class AIService {
     try {
       const relevantDocs = await this.retrieveDocuments(message);
       
+      // LOGGING: See if context was actually found
+      if (relevantDocs) {
+        console.log("✅ Context Found & Injected into AI Prompt");
+      } else {
+        console.log("⚠️ No Relevant Context Found (Falling back to General Knowledge)");
+      }
+
       const systemPrompt = `You are a helpful assistant for QMind.
       Use the following context to answer the user's question if relevant.
       Context:
@@ -17,26 +24,30 @@ class AIService {
       If the context doesn't help, answer normally based on your general knowledge.`;
 
       const history = await this.getConversationHistory(conversationId);
-
       const response = await this.callGroqAPI(message, history, systemPrompt);
-
       await chatService.addMessage(conversationId, 'AI', response, 'ai');
 
       return response;
     } catch (error) {
-      console.error(error);
+      console.error("AI Service Error:", error);
       return "I am currently unable to process your request.";
     }
   }
 
   async retrieveDocuments(query) {
     const knowledgeBase = await redisService.get('business_knowledge') || [];
-    if (!knowledgeBase.length) return "";
+    
+    if (!knowledgeBase || knowledgeBase.length === 0) {
+      console.log("🔴 Redis Knowledge Base is EMPTY! (Did data expire?)");
+      return "";
+    }
 
     const keywords = query.toLowerCase()
       .replace(/[^\w\s]/g, '')
       .split(' ')
-      .filter(w => w.length > 3);
+      .filter(w => w.length > 1); 
+
+    if (keywords.length === 0) return "";
 
     const scoredDocs = knowledgeBase.map(doc => {
       let score = 0;
@@ -47,6 +58,7 @@ class AIService {
       return { ...doc, score };
     });
 
+    // Sort by score and take top 3
     const relevant = scoredDocs
       .filter(d => d.score > 0)
       .sort((a, b) => b.score - a.score)
