@@ -56,7 +56,6 @@ export default function ChatContainer() {
       timestamp: new Date().toISOString(),
     };
     
-    setMessages((prev) => [...prev, message]);
     socketRef.current.emit('newMessage', message);
   };
 
